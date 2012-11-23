@@ -1,0 +1,101 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+__license__   = 'WTFPL'
+__version__   = '0.1'
+
+
+from calibre.web.feeds.news import BasicNewsRecipe
+from calibre.constants import config_dir, CONFIG_DIR_MODE
+from datetime import datetime
+import os, os.path, urllib
+
+class uwazamrze(BasicNewsRecipe):
+	title = u'Uważam Rze'
+	description = u'Tygodnik autorów niepokornych. Największy w Polsce.'
+	language = 'pl'
+	publisher = 'Presspublica sp. z o.o'
+	publication_type = 'magazine'
+	timefmt = ''
+
+	needs_subscription = True 
+	
+	conversion_options = {
+		'authors' : 'uwazamrze.pl'
+		,'publisher' : publisher
+		,'language' : language
+		,'preserve_cover_aspect_ratio': True
+	}
+
+	remove_javascript = True
+	recursion = 0
+
+	keep_only_tags = [{'class': ['articleTitle', 'storyContent', 'authordate']}]
+	remove_tags = [dict(name='div', attrs={'class':'editorPicks'})] 
+	extra_css      = '.authordate {font-size: small;} }'
+
+	def get_browser(self):
+		br = BasicNewsRecipe.get_browser()
+		if self.username is not None and self.password is not None:
+			br.open('http://www.uwazamrze.pl/temat/755797.html')
+			br.select_form(name='logowanie')
+			br['login']   = self.username
+			br['password'] = self.password
+			br.submit()
+		return br
+	
+	def postprocess_html(self, soup, first):
+		return self.adeify_images(soup)
+
+	def get_cover_url(self):
+		soup = self.index_to_soup('http://www.uwazamrze.pl/temat/755797.html')
+		tr = soup.find('div', attrs={'id':'urzeIssueIndex_cover'})
+		img = tr.find('img')['src']
+		cover_url = img.replace(',145.jpg', ',9.jpg')
+		return cover_url
+
+	def print_version(self,url):
+		segments = url.split(',')
+		segments = segments[1].split('-')
+
+		newUrl = "http://www.uwazamrze.pl/artykul/" + segments[0] + ".html?print=tak&p=0"
+		
+		return newUrl
+	
+	def parse_index(self):
+		feedname = [u'Uważam Rze']
+		feedurl = ['http://www.uwazamrze.pl/temat/755797.html']
+		sections = {}
+		feeds = []
+		lista = []
+
+		soup = self.index_to_soup(feedurl[0])
+		records = soup.findAll('div', attrs={'class':'urzeIssueIndex_element'})
+		for rec in records:
+			title = rec.find('div', attrs={'class':'urzeIssueIndex_title'})
+			url = title.a['href']
+			title = title.a.string.strip()
+			
+			section = rec.find('div', attrs={'class':'urzeIssueIndex_topic'})
+			section = section.a.string
+
+			author = rec.find('div', attrs={'class':'urzeIssueIndex_author'})
+			author = author.string.strip()
+
+			if not section in sections:
+				sections[section] = []
+				lista.append(section)
+			
+			sections[section].append( {
+				'title' : title,
+				'url'   : url,
+				'date'  : '',
+				'description' : '',
+				'author' : author
+			})
+			
+			
+		for section in lista:
+			feeds.append((section, sections[section]))
+		
+		return feeds
